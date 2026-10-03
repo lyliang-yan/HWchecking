@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Homework Checking</title>
+    <!-- 引入泡泡/卡通風格的字體以符合提供的圖片 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chewy&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            /* 防止在 iOS 上過度滾動和選取文字，提升 App 原生感 */
+            overscroll-behavior-y: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* 消除 iOS 點擊時的預設半透明灰色遮罩 */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 讓 SVG 圓點有平滑的顏色過渡動畫 */
+        circle {
+            transition: fill 0.3s ease, transform 0.1s ease;
+            transform-origin: center;
+        }
+
+        /* 點擊時的微小縮放回饋 */
+        g:active circle {
+            transform: scale(0.92);
+        }
+
+        .number-text {
+            font-family: 'Chewy', cursive;
+            font-size: 34px;
+            letter-spacing: 1px;
+            pointer-events: none; /* 確保點擊事件穿透文字，落到圓形上 */
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden p-6 flex flex-col items-center">
+        
+        <div class="text-center mb-4">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Homework Checking</h1>
+        </div>
+
+        <div class="w-full mb-6 flex flex-col items-center">
+            <p id="current-date" class="text-sm font-semibold text-blue-600 mb-3 tracking-wide"></p>
+            <div class="flex items-center w-full gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <label for="homework-item" class="font-bold text-gray-700 whitespace-nowrap text-lg">Item:</label>
+                <input type="text" id="homework-item" class="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400 text-lg w-full" placeholder="Enter homework name...">
+            </div>
+        </div>
+
+        <!-- SVG 容器，將透過 JavaScript 動態生成圓點 -->
+        <div class="w-full flex justify-center mb-8">
+            <svg id="grid-svg" viewBox="0 0 450 540" width="100%" class="max-w-[400px]" style="touch-action: manipulation;"></svg>
+        </div>
+
+        <button id="reset-btn" class="w-full py-4 rounded-2xl bg-gray-800 text-white font-bold text-lg shadow-md active:bg-gray-700 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                <path d="M3 3v5h5"></path>
+            </svg>
+            Reset All
+        </button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const svgContainer = document.getElementById('grid-svg');
+            const resetBtn = document.getElementById('reset-btn');
+            
+            const dateElement = document.getElementById('current-date');
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            dateElement.textContent = `Date: ${new Date().toLocaleDateString('en-US', options)}`;
+
+            // 定義佈局參數
+            const cols = 5;
+            const rows = 6;
+            const totalDots = 30;
+            const circleRadius = 36; 
+            const cellSize = 90; // 每個單元的空間大小
+            const greyColor = '#A0A0A0';
+
+            // 依據要求的六個橫排顏色設定
+            const rowColors = [
+                '#D14242', // 第1排 (1-5): 紅色
+                '#E89234', // 第2排 (6-10): 橙色
+                '#F2D834', // 第3排 (11-15): 黃色
+                '#A2C044', // 第4排 (16-20): 綠色
+                '#2475B0', // 第5排 (21-25): 藍色
+                '#644B84'  // 第6排 (26-30): 紫色
+            ];
+
+            const svgNS = "http://www.w3.org/2000/svg";
+            let allCircles = []; // 儲存所有圓圈元素的參照以便重置
+
+            // 建立 30 個圓點陣列
+            for (let i = 0; i < totalDots; i++) {
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+                const originalColor = rowColors[row];
+                const number = i + 1;
+
+                // 計算中心點位置
+                const cx = col * cellSize + (cellSize / 2);
+                const cy = row * cellSize + (cellSize / 2);
+
+                // 創建一個群組 <g> 來包裝圓形和文字
+                const group = document.createElementNS(svgNS, 'g');
+                group.style.cursor = 'pointer';
+                group.dataset.originalColor = originalColor; // 將原本顏色存入 data 屬性
+                group.dataset.state = 'unsubmitted'; // 記錄狀態
+
+                // 創建圓形
+                const circle = document.createElementNS(svgNS, 'circle');
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', circleRadius);
+                circle.setAttribute('fill', originalColor);
+                
+                // 創建數字文字
+                const text = document.createElementNS(svgNS, 'text');
+                text.setAttribute('x', cx);
+                text.setAttribute('y', cy);
+                text.setAttribute('text-anchor', 'middle'); // 左右置中
+                text.setAttribute('dominant-baseline', 'central'); // 上下置中
+                text.setAttribute('class', 'number-text');
+                
+                // 如果是黃色底(第3排)，文字用深灰色以增加對比度；其他用白色
+                if (row === 2) {
+                    text.setAttribute('fill', '#333333');
+                } else {
+                    text.setAttribute('fill', '#ffffff');
+                }
+                text.textContent = number;
+
+                // 將圓和文字加入群組
+                group.appendChild(circle);
+                group.appendChild(text);
+                svgContainer.appendChild(group);
+
+                allCircles.push({ group, circle, originalColor });
+
+                // 點擊事件處理（包含手機觸控）
+                const toggleState = (e) => {
+                    e.preventDefault(); // 防止預設行為，特別是在移動端
+                    if (group.dataset.state === 'unsubmitted') {
+                        circle.setAttribute('fill', greyColor);
+                        group.dataset.state = 'submitted';
+                    } else {
+                        circle.setAttribute('fill', originalColor);
+                        group.dataset.state = 'unsubmitted';
+                    }
+                };
+
+                // 同時綁定 click 和 touchstart 來確保 iOS 的極致反應速度
+                group.addEventListener('click', toggleState);
+            }
+
+            // 重置按鈕邏輯
+            resetBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                allCircles.forEach(item => {
+                    item.circle.setAttribute('fill', item.originalColor);
+                    item.group.dataset.state = 'unsubmitted';
+                });
+                
+                // 按鈕視覺回饋：稍微改變文字提示一下
+                const originalText = resetBtn.innerHTML;
+                resetBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg> Reset!`;
+                resetBtn.classList.replace('bg-gray-800', 'bg-green-600');
+                
+                setTimeout(() => {
+                    resetBtn.innerHTML = originalText;
+                    resetBtn.classList.replace('bg-green-600', 'bg-gray-800');
+                }, 1000);
+            });
+        });
+    </script>
+</body>
+</html>
